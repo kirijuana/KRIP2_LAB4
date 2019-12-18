@@ -13,6 +13,10 @@ namespace KRIP2_LAB4_EP
 {
     public partial class Form1 : Form
     {
+        public static uint leftRotate(uint x, int c)
+        {
+            return (x << c) | (x >> (32 - c));
+        }
         public Form1()
         {
             InitializeComponent();
@@ -22,7 +26,7 @@ namespace KRIP2_LAB4_EP
         {
 
             int[] s = new int[64] { 7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20, 4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21 };
-            // T
+
             uint[] K = new uint[64] {
             0xd76aa478, 0xe8c7b756, 0x242070db, 0xc1bdceee,
             0xf57c0faf, 0x4787c62a, 0xa8304613, 0xfd469501,
@@ -41,118 +45,71 @@ namespace KRIP2_LAB4_EP
             0x6fa87e4f, 0xfe2ce6e0, 0xa3014314, 0x4e0811a1,
             0xf7537e82, 0xbd3af235, 0x2ad7d2bb, 0xeb86d391
         };
+
             String open_text = (textBox5.Text);
+            byte[] str_code_ascii_orig = Encoding.ASCII.GetBytes(open_text);
 
-            StringBuilder sb = new StringBuilder();
-            foreach (byte b in System.Text.Encoding.Unicode.GetBytes(open_text))
-                sb.Append(Convert.ToString(b, 2).PadLeft(8, '0'));
-            string binaryStr_orig = sb.ToString();
-            string binaryStr = sb.ToString() + "1"; //дописываем единичный бит
-            int check = 0;
-            if (448 == (binaryStr.Length % 512))
-            {
-                check = 512;
-            }
-            else
-            {
-                check = 448 - binaryStr.Length;
-            }
 
-            for (int i = 0; i < check; i++)
-            {
-                binaryStr = binaryStr + "0";
-            }
+            var addLength = (56 - ((str_code_ascii_orig.Length + 1) % 64)) % 64; // (448 - (длина_строки + 8) mod 512) mod 512;
+            var str_code_ascii = new byte[str_code_ascii_orig.Length + 1 + addLength + 8]; // длина строки + 1 + добавочные биты + 8(информация о длинне сообщения);
 
-            // шаг 2
-            double length_2 = 0;
-            if (binaryStr_orig.Length > Math.Pow(2, 64) - 1)
-            {
-                length_2 = binaryStr_orig.Length % Math.Pow(2, 64);
-            }
-            else
-            {
-                length_2 = binaryStr_orig.Length;
-            }
+            // ШАГ 1
+            str_code_ascii[str_code_ascii_orig.Length] = 0x80; // добавяляем единичный бит
 
-            String str_64 = Convert.ToString((int)length_2, 2);
+            Array.Copy(str_code_ascii_orig, str_code_ascii, str_code_ascii_orig.Length);
 
-            if (str_64.Length < 64)
-            {
-                check = 64 - str_64.Length;
-                for (int i = 0; i < check; i++)
-                {
-                    str_64 = "0" + str_64;
-                }
-            }
 
-            for (int i = 32; i < 64; i++) // запись младших битов
-            {
-                binaryStr = binaryStr + str_64[i];
-            }
 
-            for (int i = 0; i < 32; i++) // запись страших битов
-            {
-                binaryStr = binaryStr + str_64[i];
-            }
+            byte[] length = BitConverter.GetBytes(str_code_ascii_orig.Length * 8); // получаем длинну искомой последовательности битов
 
-            // шаг 3
-            uint a0 = 0x67452301;   // A
-            uint b0 = 0xefcdab89;   // B
-            uint c0 = 0x98badcfe;   // C
-            uint d0 = 0x10325476;   // D
-            var binaryStr_copy = new byte[binaryStr.Length];
-            // шаг 4
-            for (int i = 0; i < binaryStr.Length; i++)
-            {
-                if (binaryStr[i] == '1')
-                {
-                    binaryStr_copy[i] = 1;
-                }
-                else
-                {
-                    binaryStr_copy[i] = 0;
-                }
-            }
+            // ШАГ 2
+            Array.Copy(length, 0, str_code_ascii, str_code_ascii.Length - 8, 4); // записываем длинну искомой последовательности вконец
 
-            for (int i = 0; i < binaryStr.Length / 64; ++i)
+            // ШАГ 3
+            uint a0 = 0x67452301;
+            uint b0 = 0xefcdab89;
+            uint c0 = 0x98badcfe;
+            uint d0 = 0x10325476;
+
+            for (int i = 0; i < str_code_ascii.Length / 64; ++i)
             {
-               
                 uint[] M = new uint[16];
                 for (int j = 0; j < 16; ++j)
-                    M[j] = BitConverter.ToUInt32(binaryStr_copy, (i * 64) + (j * 4));
+                    M[j] = BitConverter.ToUInt32(str_code_ascii, (i * 64) + (j * 4)); // разбиваем на блоки по 32 бита
 
-                
-                uint A = a0, B = b0, C = c0, D = d0, F = 0, g = 0;
 
-               
-                for (uint k = 0; k < 64; ++k)
+                uint A = a0, B = b0, C = c0, D = d0, F = 0;
+                int g = 0;
+
+                for (int j = 0; j < 64; ++j)
                 {
-                    if (k <= 15)
+                    if (j <= 15)
                     {
                         F = (B & C) | (~B & D);
-                        g = k;
+                        g = j;
                     }
-                    else if (k >= 16 && k <= 31)
+                    else if (j >= 16 && j <= 31)
                     {
                         F = (D & B) | (~D & C);
-                        g = ((5 * k) + 1) % 16;
+                        g = ((5 * j) + 1) % 16;
                     }
-                    else if (k >= 32 && k <= 47)
+                    else if (j >= 32 && j <= 47)
                     {
                         F = B ^ C ^ D;
-                        g = ((3 * k) + 5) % 16;
+                        g = ((3 * j) + 5) % 16;
                     }
-                    else if (k >= 48)
+                    else if (j >= 48)
                     {
                         F = C ^ (B | ~D);
-                        g = (7 * k) % 16;
+                        g = (7 * j) % 16;
                     }
 
-                    var dtemp = D;
+                    F = F + A + K[j] + M[g];
+                    A = D;
                     D = C;
                     C = B;
-                    B = B + ((A + F + K[k] + M[g]) << s[k]) | ((A + F + K[k] + M[g]) >> (32 - s[k]));
-                    A = dtemp;
+                    B = B + leftRotate(F, s[j]);
+
                 }
 
                 a0 += A;
@@ -160,9 +117,10 @@ namespace KRIP2_LAB4_EP
                 c0 += C;
                 d0 += D;
             }
-            textBox9.Text = String.Join("", BitConverter.GetBytes(a0).Select(y => y.ToString("x2"))) + String.Join("", BitConverter.GetBytes(b0).Select(y => y.ToString("x2"))) + String.Join("", BitConverter.GetBytes(c0).Select(y => y.ToString("x2"))) + String.Join("", BitConverter.GetBytes(d0).Select(y => y.ToString("x2")));
-            String digest = textBox9.Text;
             // шаг 5
+            textBox9.Text = String.Join("", BitConverter.GetBytes(a0).Select(y => y.ToString("x2"))) + String.Join("", BitConverter.GetBytes(b0).Select(y => y.ToString("x2"))) + String.Join("", BitConverter.GetBytes(c0).Select(y => y.ToString("x2"))) + String.Join("", BitConverter.GetBytes(d0).Select(y => y.ToString("x2")));
+            String digest = open_text + " " + textBox9.Text;
+
             BigInteger E = BigInteger.Parse(textBox1.Text), N = BigInteger.Parse(textBox7.Text);
 
             char[] alph = "-абвгдеёжзийклмнопрстуфхцчшщъыьэюяАБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯabcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ".ToCharArray();
@@ -212,8 +170,9 @@ namespace KRIP2_LAB4_EP
                 else
                     textBox6.Text = textBox6.Text + c + ", ";
             }
-        }
-
+       //     textBox6.Text =  + textBox6.Text;
+        } 
+        
         private void button2_Click(object sender, EventArgs e)
         {
             // расшифрование
@@ -230,6 +189,25 @@ namespace KRIP2_LAB4_EP
                 BinaryValue_2 = BinaryValue_2 + x2.ToString();
                 D /= 2;
             }
+
+            // разделяем открытое сообщение и 
+            //int check = 0;
+            //for(int i = 0; i < shifr_text.Length; i++)
+            //{
+            //    if(check == 0)
+            //    {
+            //        textBox4.Text = textBox4.Text + shifr_text[i];
+            //    }
+            //    if (shifr_text[i] == ',')
+            //    {
+            //        check++;
+            //    }
+
+            //    if(check != 0 && shifr_text[i] != ' ')
+            //    {
+
+            //    }
+            //}
 
             BigInteger[] intArray = shifr_text.Split(',').Select(x => BigInteger.Parse(x)).ToArray();
 
@@ -366,7 +344,7 @@ namespace KRIP2_LAB4_EP
                 D += a1;
             if (D == E)
                 D = D + Z;
-            textBox4.Text = D.ToString();
+            textBox4.Text = textBox4.Text + D.ToString();
         }
 
         private void button4_Click(object sender, EventArgs e)
